@@ -1,39 +1,83 @@
-<!doctype html><html><head><meta charset=utf-8><meta name=viewport content="width=device-width,initial-scale=1"><title>HL Copy-Trading Paper Test</title>
-<style>body{font-family:system-ui,sans-serif;margin:12px;background:#0f1117;color:#e6e6e6}.cards{display:flex;flex-wrap:wrap;gap:8px}.c{background:#1a1d27;padding:10px 14px;border-radius:8px;min-width:140px}.c b{display:block;font-size:20px}
-table{border-collapse:collapse;width:100%;font-size:13px;margin-bottom:16px}td,th{border-bottom:1px solid #333;padding:4px 6px;text-align:right;vertical-align:top}th{color:#999}td:first-child,th:first-child{text-align:left}.g{color:#3fb950}.r{color:#f85149}.m{color:#888;font-size:12px}canvas{width:100%;height:280px;background:#1a1d27;border-radius:8px}.wrap{max-height:420px;overflow:auto}a{color:#58a6ff}.dr{text-align:left;font-size:12px;color:#bbb}</style></head><body>
-<h3>Hyperliquid copy-trading forward test: PAPER ONLY, read-only (updates every 5 min, trades hourly)</h3>
-<div class=m id=rule></div><div class=cards id=cards style="margin-top:8px"></div>
-<h4>Equity vs BTC buy &amp; hold (both start at $25,000) <span class=m>blue = copy book, orange = BTC, red = drawdown</span></h4><canvas id=ch></canvas><div id=tip class=m style="height:16px"></div>
-<h4>Positions and the traders behind them</h4><table id=pos></table>
-<h4>Secure-profits exit layer: active stops above; rules and re-entry blocks</h4><div id=ex></div>
-<h4>Open maker orders</h4><table id=ord></table>
-<h4>Signals: consensus per coin (top 40 by strength)</h4><div class=wrap><table id=sig></table></div>
-<h4>Trader list <span class=m id=tts></span></h4><div class=wrap><table id=trd></table></div>
-<h4>Hedgers excluded <span class=m id=hn></span></h4><div class=wrap><table id=hdg></table></div>
-<h4>X bias (tilt / veto only) <span class=m id=xts></span></h4><table id=xb></table>
-<h4>Trade log</h4><div class=wrap><table id=tr></table></div>
-<h4>Events</h4><div class=wrap><table id=ev></table></div>
+<!doctype html><html><head><meta charset=utf-8><meta name=viewport content="width=device-width,initial-scale=1"><meta name=robots content=noindex><title>HL Copy Trader · LIVE</title>
+<style>
+body{font-family:system-ui,-apple-system,sans-serif;margin:0;padding:10px;background:#0f1117;color:#e6e6e6;font-size:14px}
+h1{font-size:18px;margin:4px 0}h4{margin:18px 0 6px;font-size:15px}
+.cards{display:grid;grid-template-columns:repeat(auto-fill,minmax(150px,1fr));gap:8px}.c{background:#1a1d27;padding:9px 12px;border-radius:8px}.c span{color:#999;font-size:12px}.c b{display:block;font-size:19px;margin-top:2px}
+.tw{overflow-x:auto;-webkit-overflow-scrolling:touch;max-height:460px;overflow-y:auto;background:#141720;border-radius:8px}
+table{border-collapse:collapse;width:100%;font-size:12.5px;white-space:nowrap}td,th{border-bottom:1px solid #2a2d38;padding:5px 7px;text-align:right}th{color:#999;position:sticky;top:0;background:#141720}td:first-child,th:first-child{text-align:left}
+.g{color:#3fb950}.r{color:#f85149}.a{color:#d29922}.m{color:#8b949e;font-size:12px}a{color:#58a6ff}
+canvas{width:100%;height:240px;background:#1a1d27;border-radius:8px;display:block}
+.pill{display:inline-block;padding:2px 8px;border-radius:10px;font-size:12px;font-weight:600;margin:2px 4px 2px 0}.pg{background:#1f3d2a;color:#3fb950}.pr{background:#4a1f1f;color:#f85149}.pa{background:#3d3214;color:#d29922}
+.al{padding:7px 10px;border-radius:6px;margin:4px 0;font-size:13px}.al.red{background:#4a1f1f}.al.amber{background:#3d3214}
+details{background:#141720;border-radius:8px;padding:8px 10px;margin-top:18px}summary{cursor:pointer;color:#bbb}
+.badge{background:#f85149;color:#fff;font-weight:700;padding:2px 7px;border-radius:5px;font-size:12px;vertical-align:middle}
+</style></head><body>
+<h1><span class=badge>LIVE</span> Hyperliquid copy trader · Grok subaccount <span class=m id=sub></span></h1>
+<div class=m id=upd>loading…</div><div id=stat style="margin:6px 0"></div><div id=alerts></div>
+<div class=cards id=cards style="margin-top:8px"></div>
+<h4>Equity <span class=m id=eqn></span></h4><canvas id=ch></canvas><div id=tip class=m style="min-height:16px"></div>
+<h4>Open positions <span class=m id=pn></span></h4><div class=tw><table id=pos></table></div>
+<h4>Closed trades (realized)</h4><div class=tw><table id=cl></table></div>
+<h4>Exit layer</h4><div class=m id=rules></div><div class=tw style="margin-top:6px"><table id=ex></table></div>
+<h4>Bot alerts</h4><div class=tw><table id=bal></table></div>
+<h4>Recent fills</h4><div class=tw><table id=fl></table></div>
+<h4>Funding payments</h4><div class=tw><table id=fu></table></div>
+<h4>Open orders on the exchange</h4><div class=tw><table id=oo></table></div>
+<h4>Traders being copied <span class=m id=tn></span></h4><div class=tw><table id=trd></table></div>
+<h4>Bot events</h4><div class=tw><table id=ev></table></div>
+<details id=pdet><summary>Paper test (old $25k simulation, kept running only to feed the live bot's trader list)</summary><div id=paper class=m>open to load…</div></details>
+<p class=m>Read-only page. Data: Hyperliquid public info API for the subaccount + the bot's own logs. Published about every 5 min. Times are ET.</p>
 <script>
-const f=(x,d=2)=>x==null||isNaN(x)?'–':Number(x).toLocaleString(undefined,{minimumFractionDigits:d,maximumFractionDigits:d});const cl=x=>x>=0?'g':'r';const sh=a=>`<a href="https://app.hyperliquid.xyz/explorer/address/${a}" target=_blank>${a.slice(0,6)}…${a.slice(-4)}</a>`;const px=x=>x==null?'–':Number(x).toPrecision(6);let pts=[];
-function draw(){const cv=document.getElementById('ch'),W=cv.width=cv.clientWidth*2,H=cv.height=560,x=cv.getContext('2d');if(pts.length<1)return;
-const e=pts.map(p=>p.equity),b=pts.map(p=>p.btc_eq||25000),all=e.concat(b,[25000]),lo=Math.min(...all)*0.995,hi=Math.max(...all)*1.005,n=pts.length,X=i=>50+(W-70)*(n<2?0.5:i/(n-1)),Y=v=>20+(H*0.65-20)*(1-(v-lo)/(hi-lo));
-x.strokeStyle='#444';x.beginPath();x.moveTo(50,Y(25000));x.lineTo(W-20,Y(25000));x.stroke();x.fillStyle='#888';x.font='20px sans-serif';x.fillText(f(hi,0),2,24);x.fillText(f(lo,0),2,H*0.65);
-[[b,'#f0883e'],[e,'#58a6ff']].forEach(([s,c])=>{x.strokeStyle=c;x.lineWidth=3;x.beginPath();s.forEach((v,i)=>i?x.lineTo(X(i),Y(v)):x.moveTo(X(i),Y(v)));x.stroke();if(n<60)s.forEach((v,i)=>{x.fillStyle=c;x.fillRect(X(i)-3,Y(v)-3,6,6)})});
-let pk=-1e9;const dd=e.map(v=>(pk=Math.max(pk,v),v/pk-1)),mn=Math.min(-0.05,...dd),D=v=>H*0.72+(H*0.26)*(v/mn);x.fillStyle='rgba(248,81,73,.5)';x.beginPath();x.moveTo(X(0),D(0));dd.forEach((v,i)=>x.lineTo(X(i),D(v)));x.lineTo(X(n-1),D(0));x.fill();x.fillStyle='#888';x.fillText('DD '+f(mn*100,1)+'% (halt -25%)',2,H-6);
-cv.onmousemove=ev=>{const r=cv.getBoundingClientRect(),i=Math.round(((ev.clientX-r.left)*2-50)/(W-70)*(n-1));const p=pts[Math.max(0,Math.min(n-1,i))];document.getElementById('tip').textContent=new Date(p.ts).toLocaleString()+'  copy $'+f(p.equity)+'  BTC $'+f(p.btc_eq)+'  dd '+f((p.dd||0)*100)+'%'}}
-async function load(){try{const d=await (await fetch('data.json?'+Date.now())).json();const pnl=d.live_equity-d.start,ddn=d.live_equity/d.peak-1;
-document.getElementById('rule').textContent='Copies the current positions of '+(d.n_active||'?')+' vetted Hyperliquid + fomo.family perps traders. A coin is traded only if ≥3 holders agree and net agreement ≥0.3. Max 3x gross, 1x per coin, ≤10% weight per trader, half size below −12%, halt at −25%. Maker limit first; exits/stops cross the spread. Fees + funding charged. Started '+(d.start_ts?new Date(d.start_ts).toLocaleString():'–')+'. Not financial advice; no real money.';
-const st=d.halted?'HALTED':(d.mult<1?'HALF SIZE':'OK');
-document.getElementById('cards').innerHTML=[['Equity','$'+f(d.live_equity)],['Total PnL',`<span class=${cl(pnl)}>$${f(pnl)} (${f(pnl/d.start*100)}%)</span>`],['BTC buy&hold',d.btc_live?`<span class=${cl(d.btc_live-25000)}>$${f(d.btc_live)} (${f((d.btc_live/25000-1)*100)}%)</span>`:'–'],['Gross leverage',f(d.gross_lev)+'x (cap 3x)'],['From peak',f(ddn*100)+'%'],['Fees / funding','$'+f(d.fees)+' / $'+f(d.funding)],['Traders active',d.n_active],['X bias',d.x_state||'–'],['Risk',`<span class=${st=='OK'?'g':'r'}>${st}</span>`]].map(a=>`<div class=c>${a[0]}<b>${a[1]}</b></div>`).join('');
-document.getElementById('ex').innerHTML='<p class=m>'+(d.exit_rules||'')+'</p><b>Re-entry blocks</b><table><tr><th>Coin<th>Blocked side<th>Reason<th>Exit px<th>Until (max)</tr>'+((d.blocks||[]).map(b=>`<tr><td>${b.coin}<td>${b.side>0?'LONG':'SHORT'}<td>${b.reason}<td>${px(b.exit_px)}<td>${new Date(b.until*1000).toLocaleString()}</tr>`).join('')||'<tr><td colspan=5 class=m>none</tr>')+'</table>';document.getElementById('hn').textContent='('+(d.hedgers||[]).length+' wallets: spot/subaccount/HIP-3 offset, static short books, or delta-neutral; removed from the copy pool)';document.getElementById('hdg').innerHTML='<tr><th>Wallet<th>Source<th>When<th>Why</tr>'+((d.hedgers||[]).map(x=>`<tr><td><a href="https://hypurrscan.io/address/${x.addr}" target=_blank>${sh(x.addr)}</a>${x.name?' '+x.name:''}<td>${x.src||''}<td>${x.when}<td class=m>${(x.reasons||[]).join('<br>')}</tr>`).join('')||'<tr><td colspan=4 class=m>none</tr>');document.getElementById('pos').innerHTML='<tr><th>Coin<th>Side<th>Notional<th>Entry<th>Mark<th>Stop (type, distance)<th>MFE/MAE (ATR)<th>uPnL<th>Target<th>Holders L/S<th>Net<th>X<th>Traders behind it (leverage)</tr>'+d.positions.map(p=>`<tr><td>${p.coin}<td class=${p.side=='LONG'?'g':'r'}>${p.side}<td>$${f(Math.abs(p.notional),0)}<td>${px(p.entry)}<td>${px(p.mark)}<td>${px(p.stop)} <span class=${p.stop_kind=='hard'?'m':'g'}>${p.stop_kind}</span> <span class=m>${p.stop_dist==null?'':f(p.stop_dist*100,1)+'%'}</span>${p.scale<1?' <span class=g>(half taken)</span>':''}<td>${p.mfe==null?'–':f(p.mfe,2)+' / '+f(p.mae,2)}<td class=${cl(p.upnl)}>$${f(p.upnl)}<td>${f(p.target*100,0)}%<td>${p.n_long}/${p.n_short}<td>${f(p.net)}<td>${p.x==null?'–':f(p.x)}<td class=dr>${(p.drivers||[]).map(t=>`${sh(t.addr)}${t.name?' '+t.name:''} <span class=m>[${t.src}]</span> <span class=${cl(t.lev)}>${f(t.lev)}x</span>`).join('<br>')}</tr>`).join('')||'<tr><td colspan=13 class=m>flat</tr>';
-document.getElementById('ord').innerHTML='<tr><th>Coin<th>Side<th>Kind<th>Limit<th>Notional<th>Posted<th>Target</tr>'+(d.orders||[]).map(o=>`<tr><td>${o.coin}<td class=${o.q>0?'g':'r'}>${o.q>0?'BUY':'SELL'}<td>${o.kind}<td>${px(o.px)}<td>$${f(Math.abs(o.q*o.px),0)}<td>${new Date(o.ts).toLocaleString()}<td>${f(o.target*100,0)}%</tr>`).join('')||'<tr><td colspan=7 class=m>none</tr>';
-document.getElementById('sig').innerHTML='<tr><th>Coin<th>Consensus C<th>Net agreement<th>Long holders<th>Short holders<th>Target<th>Status<th>X<th>Top traders</tr>'+d.signals.map(s=>`<tr><td>${s.coin}<td class=${cl(s.C)}>${f(s.C,3)}<td>${f(s.net)}<td>${s.n_long}<td>${s.n_short}<td>${f(s.raw_target*100,0)}%<td>${s.why}<td>${s.x==null?'–':f(s.x)}<td class=dr>${(s.top||[]).join(', ')}</tr>`).join('');
-document.getElementById('tts').textContent='picked '+(d.traders_ts?new Date(d.traders_ts).toLocaleString():'–')+' · re-picked weekly · '+(d.rule||'');
-document.getElementById('trd').innerHTML='<tr><th>Trader<th>Source<th>Name<th>Weight<th>Score<th>60d ROI<th>60d DD<th>60d PnL<th>AV now<th>Positions<th>Lev now<th>Fills/day<th>Maker<th>Status</tr>'+d.traders.map(t=>`<tr><td>${sh(t.addr)}<td>${t.src}<td>${t.name||''}<td>${f(t.weight*100,1)}%<td>${f(t.score,3)}<td>${f(t.roi60*100,1)}%<td>${f(t.dd60*100,1)}%<td>$${f(t.pnl60,0)}<td>$${f(t.av_now,0)}<td>${t.n_pos??'–'}<td>${f(t.gross_lev)}x<td>${t.fills_per_day}<td>${f(t.maker_share*100,0)}%<td class=${t.status=='active'?'g':'r'}>${t.status}</tr>`).join('');
-document.getElementById('xts').textContent='scored '+(d.x_bias.ts?new Date(d.x_bias.ts).toLocaleString():'–')+' · 25 crypto-trader X accounts · lexicon scoring, logged for validation';
-document.getElementById('xb').innerHTML='<tr><th>Coin<th>Bias<th>Calls (7d)</tr>'+Object.entries(d.x_bias.coins||{}).sort((a,b)=>Math.abs(b[1])-Math.abs(a[1])).map(([c,v])=>`<tr><td>${c}<td class=${cl(v)}>${f(v)}<td>${(d.x_bias.n||{})[c]||''}</tr>`).join('');
-document.getElementById('tr').innerHTML='<tr><th>Time<th>Type<th>Reason<th>Coin<th>Side<th>Price<th>Notional<th>Fee</tr>'+d.trades.map(t=>`<tr><td>${new Date(t.ts).toLocaleString()}<td class=${(t.liq||'').match(/stop|risk/)?'r':''}>${t.liq}<td>${t.reason||t.kind||''}<td>${t.coin}<td class=${t.side=='BUY'?'g':'r'}>${t.side}<td>${px(t.px)}<td>$${f(Math.abs(t.notional),0)}<td>$${f(t.fee)}</tr>`).join('')||'<tr><td colspan=8 class=m>no fills yet</tr>';
-document.getElementById('ev').innerHTML='<tr><th>Time<th>Event<th>Detail</tr>'+d.events.map(e=>`<tr><td>${new Date(e.ts).toLocaleString()}<td>${e.event}<td class=dr>${Object.entries(e).filter(([k])=>!['ts','event'].includes(k)).map(([k,v])=>k+'='+v).join(' ')}</tr>`).join('');
-pts=d.equity.concat([{ts:new Date(d.now*1000).toISOString(),equity:d.live_equity,btc_eq:d.btc_live,dd:ddn}]);draw()}catch(e){document.getElementById('rule').textContent='error '+e}}
-load();setInterval(load,15000);onresize=draw;
+const $=id=>document.getElementById(id);
+const f=(x,d=2)=>x==null||isNaN(x)?'–':Number(x).toLocaleString('en-US',{minimumFractionDigits:d,maximumFractionDigits:d});
+const usd=(x,d=2)=>x==null||isNaN(x)?'–':(x<0?'−$':'$')+f(Math.abs(x),d);const sgn=(x,d=2)=>x==null||isNaN(x)?'–':(x>=0?'+':'−')+'$'+f(Math.abs(x),d);
+const pct=(x,d=2)=>x==null||isNaN(x)?'–':(x>=0?'+':'')+(x*100).toFixed(d)+'%';const cl=x=>x==null?'':x>=0?'g':'r';
+const px=x=>x==null||x===''?'–':Number(x).toPrecision(6).replace(/\.?0+$/,'');
+const et=t=>{if(t==null)return'–';const d=typeof t==='number'?new Date(t>1e12?t:t*1000):new Date(t);return d.toLocaleString('en-US',{timeZone:'America/New_York',month:'short',day:'numeric',hour:'numeric',minute:'2-digit'})+' ET'};
+const ago=t=>{if(!t)return'–';const s=(Date.now()-(typeof t==='number'?(t>1e12?t:t*1000):Date.parse(t)))/1000;return s<90?Math.round(s)+'s ago':s<5400?Math.round(s/60)+' min ago':(s/3600).toFixed(1)+' h ago'};
+const sh=a=>`<a href="https://app.hyperliquid.xyz/explorer/address/${a}" target=_blank>${a.slice(0,6)}…${a.slice(-4)}</a>`;
+const tbl=(id,head,rows,empty='none')=>{$(id).innerHTML='<tr>'+head.map(h=>`<th>${h}</th>`).join('')+'</tr>'+(rows.length?rows.map(r=>'<tr>'+r.map(c=>`<td>${c??'–'}</td>`).join('')+'</tr>').join(''):`<tr><td colspan=${head.length} class=m>${empty}</td></tr>`)};
+let pts=[],D0=null;
+function draw(){const cv=$('ch'),W=cv.width=cv.clientWidth*2,H=cv.height=480,x=cv.getContext('2d');if(pts.length<2)return;
+ const ys=pts.map(p=>p[1]).concat([D0]),lo=Math.min(...ys),hi=Math.max(...ys),pad=(hi-lo)*0.1||10,mn=lo-pad,mx=hi+pad,t0=pts[0][0],t1=pts[pts.length-1][0];
+ const X=t=>50+(W-60)*(t-t0)/((t1-t0)||1),Y=v=>H-30-(H-50)*(v-mn)/(mx-mn);x.font='20px system-ui';x.fillStyle='#888';
+ for(let i=0;i<=4;i++){const v=mn+(mx-mn)*i/4;x.fillText(Math.round(v),2,Y(v)+6);x.strokeStyle='#2a2d38';x.beginPath();x.moveTo(50,Y(v));x.lineTo(W,Y(v));x.stroke()}
+ x.setLineDash([8,8]);x.strokeStyle='#888';x.beginPath();x.moveTo(50,Y(D0));x.lineTo(W,Y(D0));x.stroke();x.setLineDash([]);
+ x.lineWidth=3;x.strokeStyle=pts[pts.length-1][1]>=D0?'#3fb950':'#f85149';x.beginPath();pts.forEach((p,i)=>i?x.lineTo(X(p[0]),Y(p[1])):x.moveTo(X(p[0]),Y(p[1])));x.stroke();
+ x.fillStyle='#888';x.fillText(et(t0),50,H-5);const e=et(t1);x.fillText(e,W-x.measureText(e).width-5,H-5);
+ cv.onmousemove=cv.ontouchmove=ev=>{const r=cv.getBoundingClientRect(),cx=((ev.touches?ev.touches[0].clientX:ev.clientX)-r.left)*2;let b=pts[0];for(const p of pts)if(Math.abs(X(p[0])-cx)<Math.abs(X(b[0])-cx))b=p;$('tip').textContent=`${et(b[0])}: ${usd(b[1])} (${sgn(b[1]-D0)})`}}
+async function load(){let d;try{d=await (await fetch('data.json?'+Date.now())).json()}catch(e){$('upd').textContent='could not load data: '+e;return}
+ const s=d.status||{};const age=(Date.now()/1000-d.now)/60;
+ $('sub').textContent=d.sub||'';$('upd').innerHTML=`Updated ${et(d.now)} (${ago(d.now)})`+(age>15?' <span class=r>· STALE: the publisher may be offline</span>':'')+` · live since ${et(d.live_start)}`;
+ const P=(ok,t,warn)=>`<span class="pill ${ok?'pg':warn?'pa':'pr'}">${t}</span>`;
+ $('stat').innerHTML=P(s.armed,s.armed?'ARMED (real orders)':'NOT ARMED')+P(s.running,s.running?'runner running':'runner DOWN')+P(d.api_ok,d.api_ok?`HL API OK ${s.api_ms}ms`:'HL API ERROR')+
+  P(!s.halted,s.halted?'HALTED':'not halted')+P(s.flag_files&&!s.flag_files.KILLED,s.flag_files&&s.flag_files.KILLED?'KILL SWITCH FIRED':'kill switch idle')+
+  `<div class=m>Last hourly cycle ${et(s.last_cycle)} (${ago(s.last_cycle)}) · next ≈ ${et(s.next_cycle)} · last stop/order check ${ago(s.last_tick)} · bot API errors last 1h: ${s.errors_1h??0}`+
+  (s.health_watch&&s.health_watch.ts?` · health check ${ago(s.health_watch.ts)} (stops ok: ${s.health_watch.stops_ok})`:'')+(s.last_bot_error?` · last bot error ${et(s.last_bot_error.ts)}: ${s.last_bot_error.err.slice(0,90)}`:'')+'</div>';
+ if(!d.api_ok){$('alerts').innerHTML=`<div class="al red">Hyperliquid API unreachable at last publish: ${s.api_err||''}</div>`;return}
+ $('alerts').innerHTML=(d.page_alerts||[]).map(a=>`<div class="al ${a.level}">⚠ ${a.msg}</div>`).join('')||`<div class=m>✓ every position has a stop resting on Hyperliquid (${d.n_stops_ok}/${d.n_pos})</div>`;
+ const C=(t,v,c='',sub='')=>`<div class=c><span>${t}</span><b class="${c}">${v}</b><span>${sub}</span></div>`;
+ $('cards').innerHTML=C('Account value',usd(d.av),'',`start ${usd(d.start_usd,0)}`)+C('P&L since start',sgn(d.pnl),cl(d.pnl),pct(d.pnl_pct))+C('Today (since ET midnight)',sgn(d.today_pnl),cl(d.today_pnl),pct(d.today_pnl/d.today_base))+
+  C('Unrealized P&L',sgn(d.upnl),cl(d.upnl),`${d.n_pos} positions`)+C('Gross leverage',f(d.gross_lev)+'×','',`cap ${d.cfg.lev_cap}× · ${usd(d.gross_ntl,0)}`)+C('Net leverage',(d.net_lev>=0?'+':'')+f(d.net_lev)+'×',d.net_lev<0?'r':'g',d.net_lev<0?'net SHORT':'net LONG')+
+  C('Realized P&L',sgn(d.realized),cl(d.realized))+C('Fees paid',usd(d.fees))+C('Funding',sgn(d.funding),cl(d.funding))+C('Peak / drawdown',usd(d.peak),cl(d.dd),pct(d.dd)+' from peak')+
+  C('Risk limits','auto','', `day ${d.cfg.daily_loss}; ${d.cfg.max_dd}`);
+ pts=d.equity||[];D0=d.start_usd;$('eqn').textContent=`${pts.length} points · dashed = $5,000 start · before recording began: ${d.recon_note||''}`;draw();
+ const ps=d.positions||[];$('pn').textContent=`${ps.length} open · ${d.n_stops_ok} with stops`;
+ tbl('pos',['Coin','Side','Size','Notional','Entry','Mark','uPnL','Stop on HL','Stop dist','Stop kind','Traders L/S','Liq'],ps.map(p=>[`<b>${p.coin}</b>`,`<span class=${p.side=='LONG'?'g':'r'}>${p.side}</span>`,f(Math.abs(p.size),4).replace(/\.?0+$/,''),usd(Math.abs(p.notional)),px(p.entry),px(p.mark),
+  `<span class=${cl(p.upnl)}>${sgn(p.upnl)} (${pct(p.upnl_pct,1)})</span>`,p.stop_ok?px(p.stop):`<span class=r>⚠ ${p.stop?px(p.stop)+' partial':'NO STOP'}</span>`,p.stop_dist==null?'–':(p.stop_dist*100).toFixed(1)+'%',p.stop_kind||'–',`${p.n_long??'–'}/${p.n_short??'–'}`,px(p.liq)]),'flat: no open positions');
+ tbl('cl',['Closed','Coin','Dir','Size','Avg px','Realized','Fees','Net','Exit reason'],(d.closed||[]).map(r=>[et(r.t),r.coin,r.dir,f(r.sz,4).replace(/\.?0+$/,''),px(r.px),`<span class=${cl(r.pnl)}>${sgn(r.pnl)}</span>`,usd(r.fee,3),`<span class=${cl(r.net)}>${sgn(r.net)}</span>`,r.reason]),'no closed trades yet');
+ $('rules').textContent=d.exit_rules;
+ tbl('ex',['Time','Event','Coin','Detail'],(d.exits||[]).map(e=>[et(e.ts),e.event,e.coin||'',`<span class=m>${JSON.stringify(e.detail).slice(0,140)}</span>`]),'no exits / stop moves yet (all stops are still the initial hard stops)');
+ tbl('bal',['Time','Alert'],(d.alerts||[]).map(a=>[et(a.ts),a.msg+(a.coin?` (${a.coin})`:'')]),'no alerts');
+ tbl('fl',['Time','Coin','Dir','Price','Size','Notional','Fee','Closed PnL','Type','Bot reason'],(d.fills||[]).map(x=>[et(x.t),x.coin,x.dir,px(x.px),f(x.sz,4).replace(/\.?0+$/,''),usd(x.ntl),usd(x.fee,4),x.pnl?`<span class=${cl(x.pnl)}>${sgn(x.pnl)}</span>`:'',x.liq,`<span class=m>${(x.why||'').slice(0,50)}</span>`]),'no fills');
+ tbl('fu',['Time','Coin','Paid(−)/received(+)','Rate'],(d.funding_rows||[]).map(x=>[et(x.t),x.coin,`<span class=${cl(x.usdc)}>${sgn(x.usdc,4)}</span>`,(x.rate*100).toFixed(4)+'%']),'no funding yet');
+ tbl('oo',['Coin','Side','Type','Trigger','Limit','Size','Reduce-only','Placed'],(d.orders||[]).map(o=>[o.coin,o.side=='B'?'BUY':'SELL',o.type,px(o.trig),px(o.px),o.sz,o.ro?'yes':'no',et(o.ts)]),'no open orders');
+ const tr=d.traders||[];$('tn').textContent=`${tr.filter(t=>t.status.startsWith('active')).length} active · list from ${et(d.traders_ts)} · weekly re-pick, daily drop at −20% from PnL peak, hedgers excluded`;
+ tbl('trd',['Trader','Src','Status','Account','Positions','Lev','ROI 60d','In our book'],tr.map(t=>[sh(t.addr)+(t.name?' '+t.name:''),t.src||'',`<span class=${t.status.startsWith('active')?'g':'a'}>${t.status.slice(0,60)}</span>`,usd(t.av,0),t.n_pos??'–',t.gross_lev==null?'–':t.gross_lev+'×',pct(t.roi60,0),t.in_our_book.join(', ')]));
+ tbl('ev',['Time','Event','Coin','Detail'],(d.events||[]).map(e=>[et(e.ts),e.event,e.coin||'',`<span class=m>${JSON.stringify(e.detail).slice(0,140)}</span>`]));
+}
+let paperLoaded=false;$('pdet').addEventListener('toggle',async()=>{if(!$('pdet').open||paperLoaded)return;paperLoaded=true;try{const p=await (await fetch('paper.json?'+Date.now())).json();
+ $('paper').innerHTML=`Paper equity ${usd(p.live_equity)} vs $25,000 start (${pct(p.live_equity/25000-1)}) · peak ${usd(p.peak)} · gross ${f(p.gross_lev)}× · ${p.positions.length} positions · updated ${et(p.now)}<br>`+
+ p.positions.sort((a,b)=>Math.abs(b.notional)-Math.abs(a.notional)).slice(0,15).map(x=>`${x.coin} ${x.side} ${usd(Math.abs(x.notional),0)}`).join(' · ')}catch(e){$('paper').textContent='paper data unavailable'}});
+load();setInterval(load,60000);window.addEventListener('resize',draw);
 </script></body></html>
