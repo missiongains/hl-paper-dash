@@ -12,11 +12,12 @@ canvas{width:100%;height:240px;background:#1a1d27;border-radius:8px;display:bloc
 details{background:#141720;border-radius:8px;padding:8px 10px;margin-top:18px}summary{cursor:pointer;color:#bbb}
 .badge{background:#f85149;color:#fff;font-weight:700;padding:2px 7px;border-radius:5px;font-size:12px;vertical-align:middle}
 </style></head><body>
-<h1><span class=badge>LIVE</span> Hyperliquid copy trader · Grok subaccount <span class=m id=sub></span></h1>
+<h1><span class=badge>LIVE</span> Hyperliquid copy trader · bot wallet <span class=m id=sub></span></h1>
 <div class=m id=upd>loading…</div><div id=stat style="margin:6px 0"></div><div id=alerts></div>
 <div class=cards id=cards style="margin-top:8px"></div>
 <h4>Equity <span class=m id=eqn></span></h4><canvas id=ch></canvas><div id=tip class=m style="min-height:16px"></div>
 <h4>Open positions <span class=m id=pn></span></h4><div class=tw><table id=pos></table></div>
+<div id=manwrap style="display:none"><h4>Manual positions (yours — NOT the bot's; never managed, stopped or closed by the bot) <span class=m id=mn></span></h4><div class=tw><table id=man></table></div></div>
 <h4>Closed trades (realized)</h4><div class=tw><table id=cl></table></div>
 <h4>Exit layer</h4><div class=m id=rules></div><div class=tw style="margin-top:6px"><table id=ex></table></div>
 <h4>Bot alerts</h4><div class=tw><table id=bal></table></div>
@@ -26,7 +27,7 @@ details{background:#141720;border-radius:8px;padding:8px 10px;margin-top:18px}su
 <h4>Traders being copied <span class=m id=tn></span></h4><div class=tw><table id=trd></table></div>
 <h4>Bot events</h4><div class=tw><table id=ev></table></div>
 <details id=pdet><summary>Paper test (old $25k simulation, kept running only to feed the live bot's trader list)</summary><div id=paper class=m>open to load…</div></details>
-<p class=m>Read-only page. Data: Hyperliquid public info API for the subaccount + the bot's own logs. Published about every 5 min. Times are ET.</p>
+<p class=m>Read-only page. Data: Hyperliquid public info API for the bot wallet + the bot's own logs. Published about every 5 min. Times are ET.</p>
 <script>
 const $=id=>document.getElementById(id);
 const f=(x,d=2)=>x==null||isNaN(x)?'–':Number(x).toLocaleString('en-US',{minimumFractionDigits:d,maximumFractionDigits:d});
@@ -57,21 +58,23 @@ async function load(){let d;try{d=await (await fetch('data.json?'+Date.now())).j
  if(!d.api_ok){$('alerts').innerHTML=`<div class="al red">Hyperliquid API unreachable at last publish: ${s.api_err||''}</div>`;return}
  $('alerts').innerHTML=(d.page_alerts||[]).map(a=>`<div class="al ${a.level}">⚠ ${a.msg}</div>`).join('')||`<div class=m>✓ every position has a stop resting on Hyperliquid (${d.n_stops_ok}/${d.n_pos})</div>`;
  const C=(t,v,c='',sub='')=>`<div class=c><span>${t}</span><b class="${c}">${v}</b><span>${sub}</span></div>`;
- $('cards').innerHTML=C('Account value',usd(d.av),'',`start ${usd(d.start_usd,0)}`)+C('P&L since start',sgn(d.pnl),cl(d.pnl),pct(d.pnl_pct))+C('Today (since ET midnight)',sgn(d.today_pnl),cl(d.today_pnl),pct(d.today_pnl/d.today_base))+
-  C('Unrealized P&L',sgn(d.upnl),cl(d.upnl),`${d.n_pos} positions`)+C('Gross leverage',f(d.gross_lev)+'×','',`cap ${d.cfg.lev_cap}× · ${usd(d.gross_ntl,0)}`)+C('Net leverage',(d.net_lev>=0?'+':'')+f(d.net_lev)+'×',d.net_lev<0?'r':'g',d.net_lev<0?'net SHORT':'net LONG')+
-  C('Realized P&L',sgn(d.realized),cl(d.realized))+C('Fees paid',usd(d.fees))+C('Funding',sgn(d.funding),cl(d.funding))+C('Peak / drawdown',usd(d.peak),cl(d.dd),pct(d.dd)+' from peak')+
+ $('cards').innerHTML=C('Account value',usd(d.av),'',`start ${usd(d.start_usd,2)}`+((d.manual_positions||[]).length?' · incl. manual':''))+C('P&L since start',sgn(d.pnl),cl(d.pnl),pct(d.pnl_pct))+C('Today (since ET midnight)',sgn(d.today_pnl),cl(d.today_pnl),pct(d.today_pnl/d.today_base))+
+  C('Unrealized P&L (bot)',sgn(d.upnl),cl(d.upnl),`${d.n_pos} bot positions`)+C('Gross leverage',f(d.gross_lev)+'×','',`cap ${d.cfg.lev_cap}× · ${usd(d.gross_ntl,0)}`)+C('Net leverage',(d.net_lev>=0?'+':'')+f(d.net_lev)+'×',d.net_lev<0?'r':'g',d.net_lev<0?'net SHORT':'net LONG')+
+  C('Realized P&L (bot)',sgn(d.realized),cl(d.realized))+C('Fees paid (bot)',usd(d.fees))+C('Funding',sgn(d.funding),cl(d.funding))+C('Peak / drawdown',usd(d.peak),cl(d.dd),pct(d.dd)+' from peak')+
   C('Risk limits','auto','', `day ${d.cfg.daily_loss}; ${d.cfg.max_dd}`);
- pts=d.equity||[];D0=d.start_usd;$('eqn').textContent=`${pts.length} points · dashed = $5,000 start · before recording began: ${d.recon_note||''}`;draw();
+ pts=d.equity||[];D0=d.start_usd;$('eqn').textContent=`${pts.length} points · dashed = ${usd(d.start_usd,0)} start · before recording began: ${d.recon_note||''}`;draw();
  const ps=d.positions||[];$('pn').textContent=`${ps.length} open · ${d.n_stops_ok} with stops`;
- tbl('pos',['Coin','Side','Size','Notional','Entry','Mark','uPnL','Stop on HL','Stop dist','Stop kind','Traders L/S','Liq'],ps.map(p=>[`<b>${p.coin}</b>`,`<span class=${p.side=='LONG'?'g':'r'}>${p.side}</span>`,f(Math.abs(p.size),4).replace(/\.?0+$/,''),usd(Math.abs(p.notional)),px(p.entry),px(p.mark),
+ tbl('pos',['Owner','Coin','Side','Size','Notional','Entry','Mark','uPnL','Stop on HL','Stop dist','Stop kind','Traders L/S','Liq'],ps.map(p=>[`<span class=g>bot</span>`,`<b>${p.coin}</b>`,`<span class=${p.side=='LONG'?'g':'r'}>${p.side}</span>`,f(Math.abs(p.size),4).replace(/\.?0+$/,''),usd(Math.abs(p.notional)),px(p.entry),px(p.mark),
   `<span class=${cl(p.upnl)}>${sgn(p.upnl)} (${pct(p.upnl_pct,1)})</span>`,p.stop_ok?px(p.stop):`<span class=r>⚠ ${p.stop?px(p.stop)+' partial':'NO STOP'}</span>`,p.stop_dist==null?'–':(p.stop_dist*100).toFixed(1)+'%',p.stop_kind||'–',`${p.n_long??'–'}/${p.n_short??'–'}`,px(p.liq)]),'flat: no open positions');
- tbl('cl',['Closed','Coin','Dir','Size','Avg px','Realized','Fees','Net','Exit reason'],(d.closed||[]).map(r=>[et(r.t),r.coin,r.dir,f(r.sz,4).replace(/\.?0+$/,''),px(r.px),`<span class=${cl(r.pnl)}>${sgn(r.pnl)}</span>`,usd(r.fee,3),`<span class=${cl(r.net)}>${sgn(r.net)}</span>`,r.reason]),'no closed trades yet');
+ const mp=d.manual_positions||[];$('manwrap').style.display=mp.length?'':'none';$('mn').textContent=mp.length?`${mp.length} open · uPnL ${sgn(d.manual_upnl)}`:'';
+ tbl('man',['Owner','Coin','Side','Size','Notional','Entry','Mark','uPnL','Liq'],mp.map(p=>[`<span class=a>MANUAL</span>`,`<b>${p.coin}</b>`,`<span class=${p.side=='LONG'?'g':'r'}>${p.side}</span>`,f(Math.abs(p.size),4).replace(/\.?0+$/,''),usd(Math.abs(p.notional)),px(p.entry),px(p.mark),`<span class=${cl(p.upnl)}>${sgn(p.upnl)}</span>`,px(p.liq)]),'none');
+ tbl('cl',['Owner','Closed','Coin','Dir','Size','Avg px','Realized','Fees','Net','Exit reason'],(d.closed||[]).map(r=>[r.owner=='manual'?'<span class=a>MANUAL</span>':'bot',et(r.t),r.coin,r.dir,f(r.sz,4).replace(/\.?0+$/,''),px(r.px),`<span class=${cl(r.pnl)}>${sgn(r.pnl)}</span>`,usd(r.fee,3),`<span class=${cl(r.net)}>${sgn(r.net)}</span>`,r.reason]),'no closed trades yet');
  $('rules').textContent=d.exit_rules;
  tbl('ex',['Time','Event','Coin','Detail'],(d.exits||[]).map(e=>[et(e.ts),e.event,e.coin||'',`<span class=m>${JSON.stringify(e.detail).slice(0,140)}</span>`]),'no exits / stop moves yet (all stops are still the initial hard stops)');
  tbl('bal',['Time','Alert'],(d.alerts||[]).map(a=>[et(a.ts),a.msg+(a.coin?` (${a.coin})`:'')]),'no alerts');
- tbl('fl',['Time','Coin','Dir','Price','Size','Notional','Fee','Closed PnL','Type','Bot reason'],(d.fills||[]).map(x=>[et(x.t),x.coin,x.dir,px(x.px),f(x.sz,4).replace(/\.?0+$/,''),usd(x.ntl),usd(x.fee,4),x.pnl?`<span class=${cl(x.pnl)}>${sgn(x.pnl)}</span>`:'',x.liq,`<span class=m>${(x.why||'').slice(0,50)}</span>`]),'no fills');
+ tbl('fl',['Owner','Time','Coin','Dir','Price','Size','Notional','Fee','Closed PnL','Type','Bot reason'],(d.fills||[]).map(x=>[x.owner=='manual'?'<span class=a>MANUAL</span>':'bot',et(x.t),x.coin,x.dir,px(x.px),f(x.sz,4).replace(/\.?0+$/,''),usd(x.ntl),usd(x.fee,4),x.pnl?`<span class=${cl(x.pnl)}>${sgn(x.pnl)}</span>`:'',x.liq,`<span class=m>${(x.why||'').slice(0,50)}</span>`]),'no fills');
  tbl('fu',['Time','Coin','Paid(−)/received(+)','Rate'],(d.funding_rows||[]).map(x=>[et(x.t),x.coin,`<span class=${cl(x.usdc)}>${sgn(x.usdc,4)}</span>`,(x.rate*100).toFixed(4)+'%']),'no funding yet');
- tbl('oo',['Coin','Side','Type','Trigger','Limit','Size','Reduce-only','Placed'],(d.orders||[]).map(o=>[o.coin,o.side=='B'?'BUY':'SELL',o.type,px(o.trig),px(o.px),o.sz,o.ro?'yes':'no',et(o.ts)]),'no open orders');
+ tbl('oo',['Owner','Coin','Side','Type','Trigger','Limit','Size','Reduce-only','Placed'],(d.orders||[]).map(o=>[o.owner=='manual'?'<span class=a>MANUAL</span>':'bot',o.coin,o.side=='B'?'BUY':'SELL',o.type,px(o.trig),px(o.px),o.sz,o.ro?'yes':'no',et(o.ts)]),'no open orders');
  const tr=d.traders||[];$('tn').textContent=`${tr.filter(t=>t.status.startsWith('active')).length} active · list from ${et(d.traders_ts)} · weekly re-pick, daily drop at −20% from PnL peak, hedgers excluded`;
  tbl('trd',['Trader','Src','Status','Account','Positions','Lev','ROI 60d','In our book'],tr.map(t=>[sh(t.addr)+(t.name?' '+t.name:''),t.src||'',`<span class=${t.status.startsWith('active')?'g':'a'}>${t.status.slice(0,60)}</span>`,usd(t.av,0),t.n_pos??'–',t.gross_lev==null?'–':t.gross_lev+'×',pct(t.roi60,0),t.in_our_book.join(', ')]));
  tbl('ev',['Time','Event','Coin','Detail'],(d.events||[]).map(e=>[et(e.ts),e.event,e.coin||'',`<span class=m>${JSON.stringify(e.detail).slice(0,140)}</span>`]));
